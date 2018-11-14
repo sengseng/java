@@ -1,6 +1,6 @@
 # java
 JxlsUtils.java  导出大量数据到excel并压缩
-   1:<dependency>
+   1:pom.xml    <dependency>
 			<groupId>org.jxls</groupId>
 			<artifactId>jxls</artifactId>
 			<version>2.3.0</version>
