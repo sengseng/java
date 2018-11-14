@@ -1,0 +1,137 @@
+package com.mgtv.cloud.console.common.utils;
+
+import com.alibaba.fastjson.JSONArray;
+import org.jxls.common.Context;
+import org.jxls.expression.JexlExpressionEvaluator;
+import org.jxls.transform.Transformer;
+import org.jxls.transform.poi.PoiTransformer;
+import org.jxls.util.JxlsHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.*;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+@Component
+public class JxlsUtils {
+    public static Logger logger = LoggerFactory.getLogger(JxlsUtils.class);
+
+    public void exportExcel(Map<String, Object> dataMap, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        response.setContentType("application/zip");
+        response.setHeader("Connection", "close");
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setCharacterEncoding("UTF-8");
+        try {
+            List<File> srcfile=new ArrayList<File>();
+            String path = "订单统计";
+            String serverPath = this.getClass().getClassLoader().getResource("templates").getPath();
+            File file = new File(serverPath+"\\"+path);
+            if(!file.exists()){
+                file.mkdir();
+            }
+            String templateName = "order";
+            SimpleDateFormat sfm = new SimpleDateFormat("yyyy-MM-dd");
+            String filename = templateName + "_" + sfm.format(new Date());
+            String encodedfileName = new String(filename.getBytes(), "UTF-8");
+            Context context = PoiTransformer.createInitialContext();
+            JSONArray jsonArrayList = (JSONArray) dataMap.get("list");
+            int pageSize = 10000;
+            int pageNo = (jsonArrayList.size() + pageSize - 1) / pageSize;
+            if(pageNo>0){
+                for(int i=0;i<pageNo;i++) {
+                    int start = i * pageSize;
+                    int end = (i + 1) * pageSize;
+                    List<Object> curList = jsonArrayList.subList(start, end);
+                    if (dataMap != null) {
+                        for (String key : dataMap.keySet()) {
+                            if(key.equals("list")){
+                                context.putVar(key, curList);
+                            }else{
+                                context.putVar(key, dataMap.get(key));
+                            }
+                        }
+                        InputStream inputStream  = this.getClass().getClassLoader().getResourceAsStream("order.xls");
+                        FileOutputStream fileOutputStream = new FileOutputStream(serverPath+"\\"+path+"\\"+encodedfileName+"_"+i+".xls");
+                        JxlsHelper jxlsHelper = JxlsHelper.getInstance();
+                        Transformer transformer = jxlsHelper.createTransformer(inputStream, fileOutputStream);
+                        JexlExpressionEvaluator evaluator = (JexlExpressionEvaluator) transformer.getTransformationConfig().getExpressionEvaluator();
+                        Map<String, Object> funcs = new HashMap<String, Object>();
+                        funcs.put("utils", new JxlsUtils());    //添加自定义功能
+                        evaluator.getJexlEngine().setFunctions(funcs);
+                        jxlsHelper.processTemplate(context, transformer);
+                        srcfile.add(new File(serverPath+"\\"+path+"\\"+encodedfileName+"_"+i+".xls"));
+
+                    }
+
+                }
+            }
+
+            File zipfile = new File(serverPath+"\\"+path+".zip");
+            this.zipFiles(srcfile, zipfile);
+            response.setHeader("Location",path+".zip");
+            response.setHeader("Content-Disposition",
+                    "attachment;filename=" + new String(path.getBytes("GB2312"), "ISO8859-1")+".zip");
+            response.setContentLength((int) zipfile.length());
+            OutputStream outputStream = response.getOutputStream();
+            InputStream inputStream = new FileInputStream(serverPath+"\\"+path+".zip");
+            byte[] buffer = new byte[1024];
+            int i = -1;
+            while ((i = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, i);
+            }
+            outputStream.flush();
+            outputStream.close();
+            inputStream.close();
+            outputStream = null;
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将多个Excel打包成zip文件
+     * @param srcfile
+     * @param zipfile
+     */
+    public void zipFiles(List<File> srcfile, File zipfile) {
+        byte[] buf = new byte[1024];
+        try {
+            ZipOutputStream out = new ZipOutputStream(new FileOutputStream(zipfile));
+            for (int i = 0; i < srcfile.size(); i++) {
+                File file = srcfile.get(i);
+                FileInputStream in = new FileInputStream(file);
+                out.putNextEntry(new ZipEntry(file.getName()));
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
+                }
+                out.closeEntry();
+                in.close();
+            }
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static Float fenToyuan(Integer fen){
+        if(null == fen||fen == 0){
+            return 0F;
+        }
+        return Float.valueOf(fen)/100;
+    }
+
+    public static String formatStatus(String status){
+        if(status.equals("completed")){
+            return "成功";
+        }else{
+            return "失败";
+        }
+    }
+}
